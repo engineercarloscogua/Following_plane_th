@@ -1,0 +1,103 @@
+from datetime import datetime
+from typing import List, Optional
+from sqlalchemy import String, Integer, Float, ForeignKey, Text, DateTime, Table, Column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from src.core.database import Base
+
+# Junction for Tags
+task_tags = Table(
+    "task_tags",
+    Base.metadata,
+    Column("task_id", ForeignKey("tasks.id"), primary_key=True),
+    Column("tag_id", ForeignKey("tags.id"), primary_key=True),
+)
+
+class User(Base):
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    role: Mapped[str] = mapped_column(String(20))
+    status: Mapped[str] = mapped_column(String(10), default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class Tag(Base):
+    __tablename__ = "tags"
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(50), unique=True)
+    color: Mapped[str] = mapped_column(String(20), default="#3b82f6")
+
+class PlanMacro(Base):
+    __tablename__ = "plan_macros"
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    year: Mapped[int] = mapped_column(Integer)
+    objective: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(10), default="active")
+    progress: Mapped[float] = mapped_column(Float, default=0.0)
+    
+    policies: Mapped[List["Policy"]] = relationship(back_populates="plan_macro", cascade="all, delete-orphan")
+
+class Policy(Base):
+    __tablename__ = "policies"
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    plan_macro_id: Mapped[int] = mapped_column(ForeignKey("plan_macros.id"))
+    name: Mapped[str] = mapped_column(String(200))
+    weight: Mapped[float] = mapped_column(Float, default=0.0)
+    progress: Mapped[float] = mapped_column(Float, default=0.0)
+    
+    plan_macro: Mapped["PlanMacro"] = relationship(back_populates="policies")
+    strategic_items: Mapped[List["StrategicItem"]] = relationship(back_populates="policy", cascade="all, delete-orphan")
+
+class StrategicItem(Base):
+    __tablename__ = "strategic_items"
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    policy_id: Mapped[int] = mapped_column(ForeignKey("policies.id"))
+    name: Mapped[str] = mapped_column(String(200))
+    type: Mapped[str] = mapped_column(String(20))
+    weight: Mapped[float] = mapped_column(Float, default=0.0)
+    progress: Mapped[float] = mapped_column(Float, default=0.0)
+    
+    policy: Mapped["Policy"] = relationship(back_populates="strategic_items")
+    activities: Mapped[List["Activity"]] = relationship(back_populates="strategic_item", cascade="all, delete-orphan")
+
+class Activity(Base):
+    __tablename__ = "activities"
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    strategic_item_id: Mapped[int] = mapped_column(ForeignKey("strategic_items.id"))
+    name: Mapped[str] = mapped_column(String(200))
+    weight: Mapped[float] = mapped_column(Float, default=0.0)
+    progress: Mapped[float] = mapped_column(Float, default=0.0)
+    status: Mapped[str] = mapped_column(String(20), default="Pendiente")
+    
+    strategic_item: Mapped["StrategicItem"] = relationship(back_populates="activities")
+    tasks: Mapped[List["Task"]] = relationship(back_populates="activity", cascade="all, delete-orphan")
+
+class Task(Base):
+    __tablename__ = "tasks"
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    activity_id: Mapped[int] = mapped_column(ForeignKey("activities.id"))
+    name: Mapped[str] = mapped_column(String(200))
+    progress: Mapped[float] = mapped_column(Float, default=0.0)
+    weight: Mapped[float] = mapped_column(Float, default=0.0)
+    status: Mapped[str] = mapped_column(String(20), default="Pendiente")
+    target_date: Mapped[Optional[datetime]] = mapped_column(DateTime) # Legacy
+    start_date: Mapped[Optional[datetime]] = mapped_column(DateTime) # Nueva
+    end_date: Mapped[Optional[datetime]] = mapped_column(DateTime)   # Nueva
+    fulfillment_date: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    responsible_name: Mapped[Optional[str]] = mapped_column(String(100))
+    observations: Mapped[Optional[str]] = mapped_column(Text)
+    
+    activity: Mapped["Activity"] = relationship(back_populates="tasks")
+    evidences: Mapped[List["Evidence"]] = relationship(back_populates="task", cascade="all, delete-orphan")
+
+class Evidence(Base):
+    __tablename__ = "evidences"
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"))
+    url: Mapped[str] = mapped_column(String(500))
+    description: Mapped[Optional[str]] = mapped_column(String(200))
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    
+    task: Mapped["Task"] = relationship(back_populates="evidences")

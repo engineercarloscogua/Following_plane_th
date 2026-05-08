@@ -1,0 +1,82 @@
+/* Paleta Institucional Unitrópico */
+:root {
+    --primary-color: #00594e;    /* Verde Institucional */
+    --secondary-color: #b5a160;  /* Dorado Institucional */
+    --bg-color: #f8fafc;
+    --text-primary: #1e293b;
+    --white: #ffffff;
+}
+
+/* General App Styling */
+.stApp {
+    background-color: var(--bg-color);
+}
+
+/* Header Corporativo */
+.corporate-header {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #00423a 100%);
+    padding: 2.5rem;
+    border-radius: 15px;
+    color: var(--white);
+    margin-bottom: 2rem;
+    border-bottom: 5px solid var(--secondary-color);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.corporate-header h1 {
+    color: var(--white) !important;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+}
+
+/* Sidebar Customization */
+[data-testid="stSidebar"] {
+    background-color: var(--white);
+    border-right: 1px solid #e2e8f0;
+}
+
+[data-testid="stSidebar"] .stMarkdown h3 {
+    color: var(--primary-color) !important;
+}
+
+/* Botones con estilo institucional */
+div.stButton > button {
+    background-color: var(--primary-color);
+    color: white;
+    border-radius: 8px;
+    border: none;
+    padding: 0.5rem 1rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+div.stButton > button:hover {
+    background-color: var(--secondary-color);
+    border: none;
+    color: white;
+    transform: translateY(-2px);
+}
+
+/* Alertas y Mensajes */
+.stAlert {
+    border-radius: 10px;
+    border-left: 5px solid var(--secondary-color) !important;
+}
+
+/* Inputs y Selectores */
+.stSelectbox div[data-baseweb="select"] {
+    border-radius: 8px;
+}
+
+/* Tablas con estilo limpio */
+.stTable {
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+/* Estilo para los dilogos */
+div[role="dialog"] {
+    border-radius: 20px;
+    border-top: 10px solid var(--primary-color);
+}
