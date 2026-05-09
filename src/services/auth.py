@@ -2,6 +2,7 @@ import bcrypt
 from sqlalchemy.orm import Session
 from src.models.entities import User
 import streamlit as st
+import time
 
 class AuthService:
     """
@@ -25,6 +26,8 @@ class AuthService:
             st.session_state.username = user.username
             st.session_state.role = user.role
             return True
+        # Anti-Brute Force / Anti-Scraping Mitigation
+        time.sleep(1.5)
         return False
 
     @staticmethod

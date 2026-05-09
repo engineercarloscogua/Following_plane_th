@@ -127,3 +127,25 @@ div[role="dialog"] {
 .badge-process { background-color: #eff6ff; color: #3b82f6; }
 .badge-success { background-color: #ecfdf5; color: #10b981; }
 .badge-error { background-color: #fef2f2; color: #ef4444; }
+
+/* ==========================================================================
+   Anti-Scraping & DOM Obfuscation
+   ========================================================================== */
+/* Disable text selection globally to deter simple copy-paste bots */
+body {
+    -webkit-user-select: none; /* Safari */
+    -ms-user-select: none; /* IE 10 and IE 11 */
+    user-select: none; /* Standard syntax */
+}
+
+/* Hide Streamlit default components (header, footer, menu) */
+#MainMenu {visibility: hidden;}
+header {visibility: hidden;}
+footer {visibility: hidden;}
+
+/* Allow selection only on explicit inputs where necessary */
+input, textarea {
+    -webkit-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+}

@@ -4,6 +4,7 @@ from src.core.database import SessionLocal
 from src.models.entities import PlanMacro, Policy, StrategicItem, Activity, Task, Evidence
 from src.services.calculations import CalculationService
 from datetime import datetime
+import html
 
 def show_supervisor_view():
     """
@@ -60,7 +61,7 @@ def show_supervisor_view():
                         c1, c2 = st.columns([1, 1])
                         with c1: 
                             if t.responsibles:
-                                res_badges = " ".join([f"<span class='badge' style='background-color:#f1f5f9; color:#475569; border:1px solid #cbd5e1;'>{r.name}</span>" for r in t.responsibles])
+                                res_badges = " ".join([f"<span class='badge' style='background-color:#f1f5f9; color:#475569; border:1px solid #cbd5e1;'>{html.escape(r.name)}</span>" for r in t.responsibles])
                                 st.markdown(res_badges, unsafe_allow_html=True)
                             if t.start_date and t.end_date:
                                 st.caption(f"📅 {t.start_date.strftime('%d/%m/%y')} - {t.end_date.strftime('%d/%m/%y')}")

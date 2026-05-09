@@ -1,4 +1,5 @@
 import streamlit as st
+import html
 from src.core.database import SessionLocal
 from src.models.entities import Task, Activity, StrategicItem, Policy, Responsible
 from sqlalchemy.orm import joinedload
@@ -97,7 +98,7 @@ def render_alert_card(t, tipo, now):
         with c1:
             # Color del título basado en tipo
             title_color = "#ef4444" if tipo == "vencida" else ("#f59e0b" if tipo == "proxima" else "#3b82f6")
-            st.markdown(f"<h4 style='margin:0; color:{title_color};'>{t.name}</h4>", unsafe_allow_html=True)
+            st.markdown(f"<h4 style='margin:0; color:{title_color};'>{html.escape(t.name)}</h4>", unsafe_allow_html=True)
             st.caption(f"📍 {t.activity.strategic_item.policy.name} > {t.activity.strategic_item.name}")
             
             res_list = ", ".join([r.name for r in t.responsibles]) if t.responsibles else "Sin asignar"

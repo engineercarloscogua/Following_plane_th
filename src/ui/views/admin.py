@@ -4,6 +4,7 @@ from src.core.database import SessionLocal
 from src.models.entities import PlanMacro, Policy, StrategicItem, Activity, Task, Responsible
 import pandas as pd
 from datetime import datetime
+import html
 
 def show_admin_view():
     """
@@ -173,7 +174,7 @@ def manage_operational_level(db):
                 with st.expander(f"{i}.{j} {t.name}"):
                     # Mostrar responsables de forma limpia (sin etiqueta de campo)
                     if t.responsibles:
-                        res_html = " ".join([f"<span class='badge' style='background-color:#f1f5f9; color:#475569; border:1px solid #cbd5e1;'>{r.name}</span>" for r in t.responsibles])
+                        res_html = " ".join([f"<span class='badge' style='background-color:#f1f5f9; color:#475569; border:1px solid #cbd5e1;'>{html.escape(r.name)}</span>" for r in t.responsibles])
                         st.markdown(res_html, unsafe_allow_html=True)
                     else:
                         st.caption("Sin responsables asignados")

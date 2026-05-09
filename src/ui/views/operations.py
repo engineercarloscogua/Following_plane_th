@@ -1,4 +1,5 @@
 import streamlit as st
+import html
 from sqlalchemy.orm import joinedload
 from src.core.database import SessionLocal
 from src.models.entities import Plan, Program, Activity, Task, User
@@ -53,7 +54,7 @@ def show_operations_view():
                     st.write(f"**Peso:** {act.weight}%")
                 with col_a2:
                     _, color = CalculationService.get_semaforo(act.progress)
-                    st.markdown(f"<div style='padding:5px; border-radius:5px; background-color:{color}; color:white; text-align:center;'>{act.status}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding:5px; border-radius:5px; background-color:{color}; color:white; text-align:center;'>{html.escape(act.status)}</div>", unsafe_allow_html=True)
                 
                 st.markdown("---")
                 

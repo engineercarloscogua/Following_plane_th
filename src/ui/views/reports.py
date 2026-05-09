@@ -5,6 +5,7 @@ from sqlalchemy.orm import joinedload
 from src.core.database import SessionLocal
 from src.models.entities import Task, Responsible, Activity, StrategicItem, Policy, PlanMacro
 import pandas as pd
+import html
 
 def show_reports_view():
     """
@@ -134,8 +135,8 @@ def show_reports_view():
         with col_aud_1:
             st.markdown(f"""
             <div style='background: white; padding: 25px; border-radius: 20px; border-top: 8px solid {COLORS["primary"]}; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);'>
-                <h2 style='margin:0; color: {COLORS["accent"]};'>{selected_name}</h2>
-                <p style='color: #64748b;'>{res_row['Cargo']}</p>
+                <h2 style='margin:0; color: {COLORS["accent"]};'>{html.escape(selected_name)}</h2>
+                <p style='color: #64748b;'>{html.escape(res_row['Cargo'])}</p>
                 <hr style='border: 0.5px solid #f1f5f9;'>
                 <div style='display: flex; justify-content: space-between; margin-bottom: 5px;'><span>Cumplidas:</span><b>{res_row['Cumplidas']}</b></div>
                 <div style='display: flex; justify-content: space-between; margin-bottom: 5px;'><span>En Proceso:</span><b>{res_row['Proceso']}</b></div>
