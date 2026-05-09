@@ -1,7 +1,8 @@
 import streamlit as st
 from sqlalchemy.orm import joinedload
 from src.core.database import SessionLocal
-from src.models.entities import PlanMacro, Policy, StrategicItem, Activity, Task, Responsible
+from src.models.entities import PlanMacro, Policy, StrategicItem, Activity, Task, Responsible, User
+from src.services.auth import AuthService
 import pandas as pd
 from datetime import datetime
 import html
@@ -373,12 +374,72 @@ def manage_responsibles_level(db):
 
     for res in responsibles:
         with st.container(border=True):
-            c1, c2, c3 = st.columns([4, 0.5, 0.5])
-            c1.markdown(f"**{res.name}** - {res.role} ({res.department})")
-            if c2.button("✏️", key=f"e_res_{res.id}"):
+            c1, c2, c3, c4 = st.columns([4, 0.5, 0.5, 0.5])
+            
+            # Check if linked user exists
+            user_linked = db.query(User).filter(User.responsible_id == res.id).first()
+            user_info = f" | 🔐 {user_linked.username} ({user_linked.role})" if user_linked else " | 🔓 Sin acceso"
+            
+            c1.markdown(f"**{res.name}** - {res.role} ({res.department}){user_info}")
+            
+            if c2.button("🔑", key=f"k_res_{res.id}", help="Gestionar Credenciales"):
+                manage_credentials_dialog(db, res)
+            if c3.button("✏️", key=f"e_res_{res.id}"):
                 edit_responsible_dialog(db, res)
-            if c3.button("🗑️", key=f"d_res_{res.id}"):
+            if c4.button("🗑️", key=f"d_res_{res.id}"):
                 confirm_delete(db, res, "Responsable")
+
+@st.dialog("Gestionar Credenciales")
+def manage_credentials_dialog(db, res):
+    user = db.query(User).filter(User.responsible_id == res.id).first()
+    
+    if user:
+        st.write(f"Usuario vinculado: **{user.username}**")
+        st.write(f"Rol actual: **{user.role}**")
+        
+        new_role = st.selectbox("Cambiar Rol de Permisos", ["Admin", "Supervisor", "Worker"], index=["Admin", "Supervisor", "Worker"].index(user.role))
+        new_pass = st.text_input("Cambiar Contraseña", type="password", placeholder="Dejar en blanco para no cambiar")
+        
+        if st.button("Actualizar Usuario", use_container_width=True):
+            user.role = new_role
+            if new_pass:
+                user.password_hash = AuthService.hash_password(new_pass)
+            db.commit()
+            st.success("Usuario actualizado correctamente.")
+            st.rerun()
+            
+        if st.button("⚠️ Eliminar Acceso", type="primary", use_container_width=True):
+            db.delete(user)
+            db.commit()
+            st.rerun()
+    else:
+        st.info("Este responsable no tiene cuenta de acceso al sistema.")
+        with st.form("f_new_user"):
+            u_name = st.text_input("Usuario (Login)")
+            u_email = st.text_input("Email")
+            u_pass = st.text_input("Contraseña", type="password")
+            u_role = st.selectbox("Rol de Permisos", ["Admin", "Supervisor", "Worker"], index=2)
+            
+            if st.form_submit_button("Crear Cuenta de Acceso", use_container_width=True):
+                if u_name and u_pass:
+                    # Check if username exists
+                    existing = db.query(User).filter(User.username == u_name).first()
+                    if existing:
+                        st.error("El nombre de usuario ya está en uso.")
+                    else:
+                        new_user = User(
+                            username=u_name,
+                            email=u_email,
+                            password_hash=AuthService.hash_password(u_pass),
+                            role=u_role,
+                            responsible_id=res.id
+                        )
+                        db.add(new_user)
+                        db.commit()
+                        st.success(f"Cuenta para {res.name} creada como {u_role}.")
+                        st.rerun()
+                else:
+                    st.error("Usuario y Contraseña son requeridos.")
 
 @st.dialog("Editar Responsable")
 def edit_responsible_dialog(db, res):

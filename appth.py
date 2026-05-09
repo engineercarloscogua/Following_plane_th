@@ -10,6 +10,7 @@ from src.ui.views.reports import show_reports_view
 from src.ui.views.mosaico import show_mosaico_view
 from src.ui.views.export_reports import show_export_reports_view
 from src.ui.views.public_landing import show_public_landing
+from src.ui.views.worker import show_worker_view
 import os
 from PIL import Image
 
@@ -134,11 +135,16 @@ def show_app():
                 st.session_state.choice = "⚙️ Configuración Admin"
             st.divider()
 
-        st.markdown("### 🧐 SEGUIMIENTO")
-        if st.button("🧐 Gestión de tareas", use_container_width=True):
-            st.session_state.choice = "🧐 Gestión de tareas"
-        if st.button("🚨 Centro de Alertas", use_container_width=True):
-            st.session_state.choice = "🚨 Tareas Críticas"
+        if user_role in ["Admin", "Supervisor"]:
+            st.markdown("### 🧐 SEGUIMIENTO")
+            if st.button("🧐 Gestión de tareas (Supervisión)", use_container_width=True):
+                st.session_state.choice = "🧐 Gestión de tareas"
+            if st.button("🚨 Centro de Alertas", use_container_width=True):
+                st.session_state.choice = "🚨 Tareas Críticas"
+        elif user_role == "Worker":
+            st.markdown("### 👷 OPERACIÓN")
+            if st.button("👷 Mis Tareas Asignadas", use_container_width=True):
+                st.session_state.choice = "👷 Mis Tareas"
 
         # --- Sidebar Progress Indicator ---
         st.divider()
@@ -174,9 +180,11 @@ def show_app():
     elif choice == "📄 Reportes TH":
         show_export_reports_view()
     elif choice == "⚙️ Configuración Admin" and user_role == "Admin": show_admin_view()
-    elif choice == "🧐 Gestión de tareas":
+    elif choice == "🧐 Gestión de tareas" and user_role in ["Admin", "Supervisor"]:
         show_supervisor_view()
-    elif choice == "🚨 Tareas Críticas":
+    elif choice == "👷 Mis Tareas" and user_role == "Worker":
+        show_worker_view()
+    elif choice == "🚨 Tareas Críticas" and user_role in ["Admin", "Supervisor"]:
         show_alerts_view()
 
 if __name__ == "__main__":

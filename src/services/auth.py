@@ -25,6 +25,7 @@ class AuthService:
             st.session_state.user_id = user.id
             st.session_state.username = user.username
             st.session_state.role = user.role
+            st.session_state.responsible_id = user.responsible_id
             return True
         # Anti-Brute Force / Anti-Scraping Mitigation
         time.sleep(1.5)
@@ -35,6 +36,8 @@ class AuthService:
         for key in ["user_id", "username", "role"]:
             if key in st.session_state:
                 st.session_state[key] = None
+        if "responsible_id" in st.session_state:
+            st.session_state.responsible_id = None
         st.rerun()
 
     @staticmethod
@@ -49,3 +52,5 @@ class AuthService:
             st.session_state.username = None
         if "role" not in st.session_state:
             st.session_state.role = None
+        if "responsible_id" not in st.session_state:
+            st.session_state.responsible_id = None
