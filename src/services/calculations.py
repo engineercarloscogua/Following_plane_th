@@ -2,21 +2,28 @@ from sqlalchemy.orm import Session
 from src.models.entities import Task, Activity, StrategicItem, Policy, PlanMacro
 
 class CalculationService:
+    """
+    Service responsible for propagating progress updates through the 5-level hierarchy.
+    Whenever a task is updated, it triggers a recursive recalculation of parent nodes.
+    """
     @staticmethod
     def update_all_levels(db: Session, task_id: int):
-        """Recalcula toda la cadena desde una tarea hacia arriba (5 niveles)."""
+        """
+        Recalculates the entire chain from a single task up to the Plan Macro (5 levels).
+        Ensures data consistency across all dashboards.
+        """
         task = db.query(Task).filter(Task.id == task_id).first()
         if not task: return
 
-        # 1. Update Activity
+        # 1. Update Activity: Calculate progress based on child tasks
         activity = task.activity
         CalculationService._update_node(db, activity, activity.tasks)
 
-        # 2. Update Strategic Item (Plan o Programa)
+        # 2. Update Strategic Item: Calculate progress based on child activities
         si = activity.strategic_item
         CalculationService._update_node(db, si, si.activities)
 
-        # 3. Update Policy
+        # 3. Update Policy: Calculate progress based on child strategic items
         pol = si.policy
         CalculationService._update_node(db, pol, pol.strategic_items)
 
@@ -25,6 +32,7 @@ class CalculationService:
         CalculationService._update_node(db, macro, macro.policies)
 
         db.commit()
+        db.refresh(macro)
 
     @staticmethod
     def _update_node(db: Session, node, children):

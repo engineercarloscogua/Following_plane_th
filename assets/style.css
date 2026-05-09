@@ -58,6 +58,30 @@ div.stButton > button:hover {
     transform: translateY(-2px);
 }
 
+/* Estrategia de Diferenciación por Niveles (CSS) */
+
+/* 1. Botones de Tarea (Dentro de expanders anidados) */
+[data-testid="stExpander"] [data-testid="stExpander"] .stButton button {
+    background-color: var(--secondary-color) !important;
+    color: #1e293b !important;
+    border: 1px solid var(--secondary-color) !important;
+    font-weight: 600 !important;
+    height: 35px !important;
+}
+
+/* 2. Botones de Actividad (Nivel superior o fuera de expanders anidados) */
+[data-testid="stExpander"] > .stButton button,
+.corporate-header + div .stButton button {
+    background-color: var(--primary-color) !important;
+    color: white !important;
+    height: 45px !important;
+    font-weight: 700 !important;
+}
+
+/* 3. Botones de Peligro (Cualquier nivel) */
+/* Nota: Usamos el texto del emoji para identificar botones de borrar si es posible, 
+   o simplemente dejamos que el estilo de tarea/actividad mande si no hay ID único */
+
 /* Alertas y Mensajes */
 .stAlert {
     border-radius: 10px;
@@ -80,3 +104,26 @@ div[role="dialog"] {
     border-radius: 20px;
     border-top: 10px solid var(--primary-color);
 }
+
+/* Tarjetas de Tarea y Badges */
+.task-card {
+    background-color: var(--white);
+    padding: 1.2rem;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 1rem;
+    transition: all 0.2s ease;
+}
+
+.badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    display: inline-block;
+}
+
+.badge-pending { background-color: #f1f5f9; color: #64748b; }
+.badge-process { background-color: #eff6ff; color: #3b82f6; }
+.badge-success { background-color: #ecfdf5; color: #10b981; }
+.badge-error { background-color: #fef2f2; color: #ef4444; }

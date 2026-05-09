@@ -4,6 +4,10 @@ from src.models.entities import User
 import streamlit as st
 
 class AuthService:
+    """
+    Service responsible for user authentication and session management.
+    Handles login, logout, and role-based access control.
+    """
     @staticmethod
     def hash_password(password: str) -> str:
         salt = bcrypt.gensalt()

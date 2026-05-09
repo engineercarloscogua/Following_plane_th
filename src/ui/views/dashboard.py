@@ -9,152 +9,150 @@ import pandas as pd
 from datetime import datetime
 
 def show_executive_dashboard():
+    """
+    Renders the Executive Dashboard with high-level Business Intelligence metrics.
+    Uses interactive Plotly charts for policy compliance and strategic networking.
+    """
+    # --- High-End Visual Configuration ---
+    COLORS = {
+        "primary": "#00594e",
+        "secondary": "#b5a160",
+        "neutral": "#64748b",
+        "success": "#10b981",
+        "warning": "#f59e0b",
+        "danger": "#ef4444"
+    }
+    
+    st.markdown("<div class='corporate-header'>", unsafe_allow_html=True)
+    st.title("🏛️ Tablero de Control Estratégico TH")
+    st.write("Seguimiento Integral: Gestión Macro, Políticas y Programas")
+    st.markdown("</div>", unsafe_allow_html=True)
+    
     db = SessionLocal()
     try:
-        st.markdown("<div class='corporate-header'>", unsafe_allow_html=True)
-        st.title("🏛️ Tablero de Control Estratégico TH")
-        st.write("Seguimiento de Gestión Institucional Unitrópico")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        # 1. Filtros de Periodo
-        col_f1, col_f2 = st.columns([1, 2])
-        with col_f1:
-            periodo = st.selectbox("Vista Temporal", ["Anual", "Semestral", "Trimestral", "Mensual"])
-        
-        # Cargar todos los datos con sus fechas
+        # Carga completa para análisis multinivel
         macros = db.query(PlanMacro).options(
-            joinedload(PlanMacro.policies).joinedload(Policy.strategic_items).joinedload(StrategicItem.activities).joinedload(Activity.tasks)
+            joinedload(PlanMacro.policies).joinedload(Policy.strategic_items)
         ).all()
         
-        if not macros: return st.info("No hay información registrada para mostrar indicadores.")
+        if not macros: return st.info("No hay datos registrados para análisis.")
 
-        m_map = {m.id: m for m in macros}
-        m_id = st.selectbox("Gestión Macro para Análisis", options=list(m_map.keys()), format_func=lambda x: m_map[x].name)
-        macro = m_map[m_id]
+        # --- FILTROS DE FÁCIL ACCESO ---
+        st.markdown("### 📊 Filtros de Consulta")
+        with st.container(border=True):
+            f1, f2, f3, f4 = st.columns(4)
+            all_years = sorted(list(set([m.year for m in macros] + [datetime.now().year])))
+            sel_year = f1.selectbox("📅 Año", all_years, index=all_years.index(datetime.now().year) if datetime.now().year in all_years else 0)
+            sel_semester = f2.selectbox("🌓 Semestre", ["Todos", "Semestre A", "Semestre B"])
+            sel_quarter = f3.selectbox("📊 Trimestre", ["Todos", "T1", "T2", "T3", "T4"])
+            months_names = ["Todos", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+            sel_month = f4.selectbox("📆 Mes", months_names)
 
-        # 2. Métricas de Cabecera (Resumen)
-        st.subheader("📊 Indicadores de Desempeño")
-        c1, c2, c3, c4 = st.columns(4)
-        
-        # Calcular métricas basadas en el periodo (Simulación de filtrado temporal)
-        total_tasks = 0
-        completed_tasks = 0
+        macro = next((m for m in macros if m.year == sel_year), macros[0])
+
+        # Recolección de datos filtrados
+        tasks_data = []
         for pol in macro.policies:
             for si in pol.strategic_items:
                 for act in si.activities:
                     for t in act.tasks:
-                        total_tasks += 1
-                        if t.status == "Cumplida": completed_tasks += 1
-        
-        c1.metric("Avance Total", f"{macro.progress:.1f}%")
-        c2.metric("Tareas Totales", total_tasks)
-        c3.metric("Cumplidas", completed_tasks)
-        c4.metric("Pendientes", total_tasks - completed_tasks)
-
-        st.divider()
-
-        # 3. Gráficos Principales
-        col_g1, col_g2 = st.columns([1, 1.2])
-        
-        with col_g1:
-            # Velocímetro (Gauge)
-            status_text, color = CalculationService.get_semaforo(macro.progress)
-            fig_gauge = go.Figure(go.Indicator(
-                mode = "gauge+number", value = macro.progress,
-                domain = {'x': [0, 1], 'y': [0, 1]},
-                title = {'text': "Avance Consolidado Gestión TH", 'font': {'size': 18, 'color': '#00594e'}},
-                gauge = {
-                    'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "#00594e"},
-                    'bar': {'color': color},
-                    'bgcolor': "white",
-                    'borderwidth': 2,
-                    'bordercolor': "#e2e8f0",
-                    'steps': [
-                        {'range': [0, 60], 'color': '#fee2e2'},
-                        {'range': [60, 80], 'color': '#fef3c7'},
-                        {'range': [80, 100], 'color': '#d1fae5'}
-                    ],
-                }
-            ))
-            fig_gauge.update_layout(height=350, margin=dict(l=20, r=20, t=50, b=20))
-            st.plotly_chart(fig_gauge, use_container_width=True)
-
-        with col_g2:
-            # Gráfico de Barras por Política
-            pol_data = [{"Política": p.name, "Avance": p.progress} for p in macro.policies]
-            if pol_data:
-                df_pol = pd.DataFrame(pol_data)
-                fig_bar = px.bar(df_pol, x="Política", y="Avance", 
-                                 title="Avance por Política Institucional",
-                                 color="Avance", color_continuous_scale='RdYlGn', range_color=[0, 100],
-                                 text_auto='.1f')
-                fig_bar.update_layout(height=350, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig_bar, use_container_width=True)
-
-        st.divider()
-
-        # 4. Análisis Temporal (Progreso por Meses/Trimestres)
-        st.subheader(f"📈 Trazabilidad Temporal ({periodo})")
-        
-        # Extraer datos temporales
-        temp_data = []
-        for pol in macro.policies:
-            for si in pol.strategic_items:
-                for act in si.activities:
-                    for t in act.tasks:
-                        if t.target_date:
-                            date = t.target_date
-                            month = date.strftime("%Y-%m")
-                            quarter = f"{date.year}-Q{(date.month-1)//3 + 1}"
-                            semester = f"{date.year}-S{(date.month-1)//6 + 1}"
-                            temp_data.append({
-                                "Fecha": date,
-                                "Mes": month,
-                                "Trimestre": quarter,
-                                "Semestre": semester,
+                        if not t.end_date: continue
+                        match = True
+                        if sel_semester == "Semestre A" and not (1 <= t.end_date.month <= 6): match = False
+                        if sel_semester == "Semestre B" and not (7 <= t.end_date.month <= 12): match = False
+                        if sel_quarter != "Todos" and f"T{(t.end_date.month-1)//3+1}" != sel_quarter: match = False
+                        if sel_month != "Todos" and months_names[t.end_date.month] != sel_month: match = False
+                        if match:
+                            tasks_data.append({
+                                "Política": pol.name,
+                                "Programa/Plan": si.name,
                                 "Avance": t.progress,
-                                "Peso": t.weight
+                                "Estado": t.status,
+                                "Fecha": t.end_date
                             })
         
-        if temp_data:
-            df_temp = pd.DataFrame(temp_data)
-            group_col = "Mes" if periodo == "Mensual" else ("Trimestre" if periodo == "Trimestral" else "Semestre" if periodo == "Semestral" else "Fecha")
-            
-            if periodo == "Anual":
-                df_grouped = df_temp.groupby(df_temp['Fecha'].dt.year)['Avance'].mean().reset_index()
-                df_grouped.columns = ['Año', 'Avance Promedio']
-                fig_line = px.line(df_grouped, x='Año', y='Avance Promedio', markers=True, title="Avance Promedio Anual")
-            else:
-                df_grouped = df_temp.groupby(group_col)['Avance'].mean().reset_index()
-                fig_line = px.area(df_grouped, x=group_col, y='Avance', 
-                                  title=f"Evolución del Avance {periodo}",
-                                  line_shape='spline', markers=True)
-            
-            fig_line.update_traces(line_color='#00594e', fillcolor='rgba(0, 89, 78, 0.2)')
-            st.plotly_chart(fig_line, use_container_width=True)
+        df_f = pd.DataFrame(tasks_data)
 
-        # 5. Mapa de Calor (Treemap) de Programas
-        st.subheader("🗺️ Mapa Estratégico de Programas y Planes")
-        tree_items = []
-        for pol in macro.policies:
-            for si in pol.strategic_items:
-                tree_items.append({
-                    "Nombre": si.name,
-                    "Política": pol.name,
-                    "Avance": si.progress,
-                    "Tipo": si.type
-                })
+        # --- SECCIÓN 1: GESTIÓN MACRO (NIVEL 5) ---
+        st.markdown(f"## 🏢 {macro.name}")
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Avance Plan Macro", f"{macro.progress:.1f}%")
+        k2.metric("Cumplimiento Periodo", f"{df_f['Avance'].mean() if not df_f.empty else 0:.1f}%")
+        k3.metric("Tareas Activas", len(df_f))
+        k4.metric("Políticas en Curso", len(macro.policies))
+
+        st.divider()
+
+        # --- SECCIÓN 2: POLÍTICAS Y PROGRAMAS (NIVELES 4 Y 3) ---
+        col_left, col_right = st.columns([1, 1.2])
+
+        with col_left:
+            # Velocímetro Principal: Gestión Institucional
+            _, color = CalculationService.get_semaforo(macro.progress)
+            fig_macro = go.Figure(go.Indicator(
+                mode = "gauge+number", value = macro.progress,
+                title = {'text': "Avance Consolidado TH", 'font': {'size': 18, 'color': COLORS["primary"]}},
+                gauge = {
+                    'axis': {'range': [None, 100]},
+                    'bar': {'color': color},
+                    'steps': [
+                        {'range': [0, 60], 'color': "#fee2e2"},
+                        {'range': [60, 80], 'color': "#fef3c7"},
+                        {'range': [80, 100], 'color': "#d1fae5"}
+                    ]
+                }
+            ))
+            fig_macro.update_layout(height=350, margin=dict(l=30, r=30, t=50, b=20), template="plotly_white")
+            st.plotly_chart(fig_macro, use_container_width=True)
+
+        with col_right:
+            # Avance por Política (Horizontal Bar - Fácil de entender)
+            pol_list = [{"Nombre": p.name, "Avance": p.progress} for p in macro.policies]
+            df_pol = pd.DataFrame(pol_list).sort_values("Avance", ascending=True)
+            
+            fig_pol = px.bar(
+                df_pol, x='Avance', y='Nombre', orientation='h',
+                title="Cumplimiento por Política Institucional",
+                text_auto='.1f',
+                color='Avance',
+                color_continuous_scale=[[0, '#ef4444'], [0.5, '#f59e0b'], [1, '#10b981']],
+                template="plotly_white"
+            )
+            fig_pol.update_layout(showlegend=False, xaxis=dict(range=[0, 100]), yaxis=dict(title=""))
+            st.plotly_chart(fig_pol, use_container_width=True)
+
+        st.divider()
+
+        # --- SECCIÓN 3: DESGLOSE DE PROGRAMAS Y PLANES ---
+        st.subheader("🧩 Desglose Estratégico (Políticas > Programas > Planes)")
         
-        if tree_items:
-            fig_tree = px.treemap(pd.DataFrame(tree_items), 
-                                 path=["Política", "Nombre"], 
-                                 values="Avance",
-                                 color="Avance", 
-                                 color_continuous_scale='RdYlGn', 
-                                 range_color=[0, 100],
-                                 hover_data=["Tipo"])
-            fig_tree.update_layout(height=450)
-            st.plotly_chart(fig_tree, use_container_width=True)
+        # Gráfico Sunburst: Lo más fácil para ver jerarquías
+        if not df_f.empty:
+            fig_sun = px.sunburst(
+                df_f, path=['Política', 'Programa/Plan'], values='Avance',
+                title="Mapa de Programas y Planes por Política",
+                color='Avance',
+                color_continuous_scale='RdYlGn',
+                template="plotly_white"
+            )
+            fig_sun.update_layout(margin=dict(t=40, l=0, r=0, b=0), height=500)
+            st.plotly_chart(fig_sun, use_container_width=True)
+        else:
+            st.info("No hay datos suficientes para el desglose detallado en este periodo.")
+
+        # --- SECCIÓN 4: TENDENCIA TEMPORAL ---
+        if not df_f.empty:
+            st.subheader("📈 Evolución de la Gestión")
+            df_f['Mes'] = df_f['Fecha'].dt.strftime('%b %Y')
+            df_trend = df_f.groupby('Mes')['Avance'].mean().reset_index()
+            
+            fig_trend = px.line(
+                df_trend, x='Mes', y='Avance', markers=True,
+                title="Tendencia de Avance del Periodo",
+                template="plotly_white"
+            )
+            fig_trend.update_traces(line_color=COLORS["primary"], line_width=4)
+            st.plotly_chart(fig_trend, use_container_width=True)
 
     finally:
         db.close()

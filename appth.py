@@ -6,13 +6,31 @@ from src.ui.views.admin import show_admin_view
 from src.ui.views.dashboard import show_executive_dashboard
 from src.ui.views.supervisor import show_supervisor_view
 from src.ui.views.alerts import show_alerts_view
+from src.ui.views.reports import show_reports_view
+from src.ui.views.mosaico import show_mosaico_view
 import os
 from PIL import Image
 
-# Asegurar carpetas y archivos
+# Initialize database schema
 Base.metadata.create_all(bind=engine)
 
-# Configuración de página con Identidad Institucional
+# Seed initial responsibles if they don't exist
+def seed_responsibles():
+    from src.models.entities import Responsible
+    db = SessionLocal()
+    if db.query(Responsible).count() == 0:
+        initial_res = [
+            Responsible(name="Ing. Claudia Morales", role="Coordinadora de Talento Humano", department="Talento Humano"),
+            Responsible(name="Dr. Ricardo Serna", role="Director Administrativo", department="Dirección Administrativa"),
+            Responsible(name="Lic. Sonia Pinzón", role="Analista de Nómina", department="Talento Humano")
+        ]
+        db.add_all(initial_res)
+        db.commit()
+    db.close()
+
+seed_responsibles()
+
+# Page configuration with Institutional Identity
 favicon_path = "assets/images/favicon.png"
 page_icon = "🏛️"
 if os.path.exists(favicon_path):
@@ -24,24 +42,34 @@ st.set_page_config(
     layout="wide"
 )
 
-# Inicializar sesión
+# Initialize authentication session
 AuthService.init_session()
 
-# Cargar CSS corporativo
+# Load corporate CSS
+@st.cache_data
 def local_css(file_name):
     if os.path.exists(file_name):
         with open(file_name) as f:
-            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+            return f"<style>{f.read()}</style>"
+    return ""
 
-local_css("assets/style.css")
+style_html = local_css("assets/style.css")
+st.markdown(style_html, unsafe_allow_html=True)
 
 def main():
+    """
+    Main entry point for the Streamlit application.
+    Orchestrates authentication flow and high-level view routing.
+    """
     if not AuthService.is_authenticated():
         show_login()
     else:
         show_app()
 
 def show_login():
+    """
+    Renders the secure login portal.
+    """
     st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
     col_l1, col_l2, col_l3 = st.columns([1, 1, 1])
     with col_l2:
@@ -49,7 +77,7 @@ def show_login():
         if os.path.exists(logo_path):
             st.image(logo_path, use_container_width=True)
     
-    st.markdown("<p style='text-align: center; color: #64748b; font-weight: 500;'>Sistema de Gestión Estratégica Unitrópico</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #64748b; font-weight: 500;'>Sistema de Gestión Estratégica de Talento Humano</p>", unsafe_allow_html=True)
     
     c1, c2, c3 = st.columns([1, 1.2, 1])
     with c2:
@@ -68,6 +96,9 @@ def show_login():
                 db.close()
 
 def show_app():
+    """
+    Renders the main application shell with structured navigation and role-based access.
+    """
     user_role = st.session_state.get('role')
     user_name = st.session_state.get('username')
 
@@ -80,28 +111,70 @@ def show_app():
         st.caption(f"Rol: **{user_role}**")
         st.divider()
         
-        menu_options = ["🏠 Dashboard"]
+    # --- Structured Navigation ---
+    if 'choice' not in st.session_state:
+        st.session_state.choice = "🏠 Dashboard"
+
+    with st.sidebar:
+        st.markdown("### 📊 INTELIGENCIA")
+        if st.button("🏠 Dashboard Institucional", use_container_width=True):
+            st.session_state.choice = "🏠 Dashboard"
+        if st.button("📈 Dashboard Personal", use_container_width=True):
+            st.session_state.choice = "📈 Dashboard Personal"
+        if st.button("🧩 Mosaico TH", use_container_width=True):
+            st.session_state.choice = "🧩 Mosaico TH"
+        
+        st.divider()
+        
         if user_role == "Admin":
-            menu_options += ["⚙️ Configuración Admin"]
-        
-        menu_options += ["🧐 Supervisión", "🚨 Tareas Críticas", "📊 Reportes"]
-        
-        choice = st.radio("Navegación Institucional", menu_options)
+            st.markdown("### ⚙️ ADMINISTRACIÓN")
+            if st.button("⚙️ Configuración Admin", use_container_width=True):
+                st.session_state.choice = "⚙️ Configuración Admin"
+            st.divider()
+
+        st.markdown("### 🧐 SEGUIMIENTO")
+        if st.button("🧐 Gestión de tareas", use_container_width=True):
+            st.session_state.choice = "🧐 Gestión de tareas"
+        if st.button("🚨 Centro de Alertas", use_container_width=True):
+            st.session_state.choice = "🚨 Tareas Críticas"
+
+        # --- Sidebar Progress Indicator ---
+        st.divider()
+        st.markdown("### 🏛️ Avance de Gestión TH")
+        db = SessionLocal()
+        try:
+            from src.models.entities import PlanMacro, Policy
+            from sqlalchemy.orm import joinedload
+            macro = db.query(PlanMacro).options(joinedload(PlanMacro.policies)).first()
+            if macro:
+                st.metric("Consolidado Total", f"{macro.progress:.1f}%")
+                for pol in macro.policies:
+                    st.caption(f"{pol.name}")
+                    st.progress(pol.progress / 100)
+            else:
+                st.info("Sin plan configurado.")
+        finally:
+            db.close()
+
         st.divider()
         if st.button("🚪 Cerrar Sesión", use_container_width=True):
             AuthService.logout()
 
+    # --- View Rendering (Scoped inside show_app) ---
+    choice = st.session_state.choice
+
     if choice == "🏠 Dashboard":
         show_executive_dashboard()
+    elif choice == "📈 Dashboard Personal":
+        show_reports_view()
+    elif choice == "🧩 Mosaico TH":
+        show_mosaico_view()
     elif choice == "⚙️ Configuración Admin":
         if user_role == "Admin": show_admin_view()
-    elif choice == "🧐 Supervisión":
+    elif choice == "🧐 Gestión de tareas":
         show_supervisor_view()
     elif choice == "🚨 Tareas Críticas":
         show_alerts_view()
-    elif choice == "📊 Reportes":
-        st.header("📊 Reportes Institucionales")
-        st.info("Módulo de reportes en construcción.")
 
 if __name__ == "__main__":
     main()

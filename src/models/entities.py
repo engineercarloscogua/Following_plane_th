@@ -12,6 +12,14 @@ task_tags = Table(
     Column("tag_id", ForeignKey("tags.id"), primary_key=True),
 )
 
+# Junction for Responsibles
+task_responsibles = Table(
+    "task_responsibles",
+    Base.metadata,
+    Column("task_id", ForeignKey("tasks.id"), primary_key=True),
+    Column("responsible_id", ForeignKey("responsibles.id"), primary_key=True),
+)
+
 class User(Base):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
@@ -28,14 +36,29 @@ class Tag(Base):
     name: Mapped[str] = mapped_column(String(50), unique=True)
     color: Mapped[str] = mapped_column(String(20), default="#3b82f6")
 
+class Responsible(Base):
+    __tablename__ = "responsibles"
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    role: Mapped[str] = mapped_column(String(100))
+    department: Mapped[str] = mapped_column(String(100))
+    
+    tasks: Mapped[List["Task"]] = relationship(
+        secondary=task_responsibles, back_populates="responsibles"
+    )
+
 class PlanMacro(Base):
+    """
+    PlanMacro represents the highest level in the strategic hierarchy (Level 5).
+    It usually corresponds to a full fiscal year of Human Resources management.
+    """
     __tablename__ = "plan_macros"
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(200))
     year: Mapped[int] = mapped_column(Integer)
     objective: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(10), default="active")
-    progress: Mapped[float] = mapped_column(Float, default=0.0)
+    progress: Mapped[float] = mapped_column(Float, default=0.0) # Consolidated progress from Level 4
     
     policies: Mapped[List["Policy"]] = relationship(back_populates="plan_macro", cascade="all, delete-orphan")
 
@@ -91,6 +114,9 @@ class Task(Base):
     
     activity: Mapped["Activity"] = relationship(back_populates="tasks")
     evidences: Mapped[List["Evidence"]] = relationship(back_populates="task", cascade="all, delete-orphan")
+    responsibles: Mapped[List["Responsible"]] = relationship(
+        secondary=task_responsibles, back_populates="tasks"
+    )
 
 class Evidence(Base):
     __tablename__ = "evidences"
