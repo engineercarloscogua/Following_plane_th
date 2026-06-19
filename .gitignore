@@ -1,10 +1,11 @@
-# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-env/
+
+# Distribution / packaging
 build/
 develop-eggs/
 dist/
@@ -20,18 +21,15 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-.env
+MANIFEST
 
-# Streamlit
-.streamlit/
-
-# Base de datos local (Opcional: descomentar si NO quieres subir datos de prueba)
-# data/*.sqlite
-
-# Entornos virtuales
+# Virtual environments
 venv/
 .venv/
 env/
+ENV/
+env.bak/
+venv.bak/
 
 # IDEs
 .vscode/
@@ -42,3 +40,16 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+
+# Streamlit
+.streamlit/
+secrets.toml
+
+# Base de datos local
+data/*.sqlite
+
+# Archivos de entorno y configuración local
+.env
+.envrc
+*.extracted.txt
+tempCodeRunnerFile.py
