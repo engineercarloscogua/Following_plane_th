@@ -221,9 +221,11 @@ def show_executive_dashboard():
             for si in pol.strategic_items:
                 for act in si.activities:
                     for t in act.tasks:
+                        # Truncar nombre de estrategia para legibilidad e incrementar tamaño de letra
+                        short_estr = si.name[:50] + "..." if len(si.name) > 50 else si.name
                         tasks_data.append({
                             "Política":      pol.name,
-                            "Estrategia": si.name,
+                            "Estrategia":    short_estr,
                             "Avance":        t.progress,
                         })
 
@@ -241,10 +243,11 @@ def show_executive_dashboard():
             )
             fig_tree.update_traces(
                 texttemplate="<b>%{label}</b><br>%{color:.1f}%",
-                hovertemplate="<b>%{label}</b><br>Avance: %{color:.1f}%<br>Hitos: %{value}<extra></extra>",
-                marker=dict(line=dict(color="#fff", width=2))
+                hovertemplate="<b>%{label}</b><br>Avance: %{color:.1f}%<extra></extra>",
+                marker=dict(line=dict(color="#fff", width=2)),
+                textfont=dict(size=14)  # Forzar tamaño de fuente visible
             )
-            fig_tree.update_layout(margin=dict(t=40, l=0, r=0, b=0), height=420)
+            fig_tree.update_layout(margin=dict(t=40, l=0, r=0, b=0), height=450)
             st.plotly_chart(fig_tree, use_container_width=True)
         else:
             st.info("Sin hitos estratégicos configurados.")
@@ -298,14 +301,12 @@ def show_executive_dashboard():
                 )
 
             # Mini gráfico de proyección lineal
-            import numpy as np
             fechas_hist = [now_dt - timedelta(days=30), now_dt]
             prog_hist   = [max(current_prog - vel_promedio * 30, 0), current_prog]
             if fecha_proy and dias_proy < 730:  # Solo proyectar si < 2 años
                 fechas_proj = [now_dt, fecha_proy]
                 prog_proj   = [current_prog, 100]
 
-                import plotly.graph_objects as go
                 fig_proj = go.Figure()
                 fig_proj.add_trace(go.Scatter(
                     x=fechas_hist, y=prog_hist, mode="lines+markers",

@@ -53,3 +53,4 @@ data/*.sqlite
 .envrc
 *.extracted.txt
 tempCodeRunnerFile.py
+scratch/

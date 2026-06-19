@@ -12,18 +12,22 @@
 ---
 
 ## 📌 Estado de Git y Ramificación
-- **Rama Actual:** `task/context-and-git-skills`
+- **Rama Actual:** `task/test-and-fix-project`
 - **Estado de Trabajo:**
 ```text
 Modified files:
-  - ?? PROJECT_CONTEXT.md
-  - ?? scripts/
+  - M .gitignore
+  -  M PROJECT_CONTEXT.md
+  -  M data/th_platform.sqlite
+  -  M src/ui/views/dashboard.py
+  - ?? PRUEBAS_CHECKLIST.md
+  - ?? scripts/create_workers.py
 ```
 - **Últimos Commits:**
 ```text
+6949bf5 feat: implement project context preservation and git branch policy
 581fa49 Resolve merge conflicts in .gitignore and README.md
 0de0672 Primer commit
-587977c Initial commit
 ```
 
 ---
@@ -33,7 +37,7 @@ Modified files:
 - **Políticas registradas:** 8
 - **Actividades:** 86
 - **Tareas totales:** 92 (Progreso promedio: 45.22%)
-- **Personal registrado:** 2
+- **Personal registrado:** 7
 - **Registros de auditoría (logs):** 0
 
 ---
@@ -47,5 +51,9 @@ Modified files:
 ---
 
 ## 📜 Historial Reciente de Sesiones
+- **2026-06-19 12:01:43**: Creados 5 trabajadores nuevos en base de datos. Generado archivo de checklist PRUEBAS_CHECKLIST.md en la raiz del proyecto.
+- **2026-06-19 11:47:19**: Aumentado el tamaño de la letra y truncadas las descripciones de Estrategia a 50 caracteres en el grafico Treemap de Desglose Estrategico del Dashboard
+- **2026-06-19 11:44:39**: Corregido error UnboundLocalError en src/ui/views/dashboard.py removiendo importaciones locales redundantes de numpy y plotly
+- **2026-06-19 11:39:38**: Realizadas pruebas completas dry-run exitosas de los servicios de calculo, autenticacion y todos los exportadores (PDF, Word, Excel). Ignorado directorio scratch/ en .gitignore.
 - **2026-06-19 11:32:27**: Configurado el entorno de preservación de contexto y políticas de ramas de Git en la rama task/context-and-git-skills
 - **2026-06-19 11:32:03**: Inicialización del sistema de preservación de contexto y configuración del rol Experto en GitHub.
