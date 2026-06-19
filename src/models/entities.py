@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from sqlalchemy import String, Integer, Float, ForeignKey, Text, DateTime, Table, Column
+from sqlalchemy import String, Integer, Float, ForeignKey, Text, DateTime, Table, Column, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.core.database import Base
 
@@ -47,10 +47,10 @@ class Responsible(Base):
     department: Mapped[str] = mapped_column(String(100))
     
     
-    tasks: Mapped[List["Task"]] = relationship(
+    tasks: Mapped[List["src.models.entities.Task"]] = relationship(
         secondary=task_responsibles, back_populates="responsibles"
     )
-    supervised_activities: Mapped[List["Activity"]] = relationship(
+    supervised_activities: Mapped[List["src.models.entities.Activity"]] = relationship(
         secondary=activity_supervisors, back_populates="supervisors"
     )
 
@@ -67,7 +67,7 @@ class User(Base):
     
     # Link to Responsible
     responsible_id: Mapped[Optional[int]] = mapped_column(ForeignKey("responsibles.id"))
-    responsible: Mapped[Optional["Responsible"]] = relationship()
+    responsible: Mapped[Optional["src.models.entities.Responsible"]] = relationship()
 
 class PlanMacro(Base):
     """
@@ -82,8 +82,9 @@ class PlanMacro(Base):
     objective: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(10), default="active")
     progress: Mapped[float] = mapped_column(Float, default=0.0) # Consolidated progress from Level 4
+    is_locked: Mapped[bool] = mapped_column(Boolean, default=False) # 3.1 Cierre de periodo
     
-    policies: Mapped[List["Policy"]] = relationship(back_populates="plan_macro", cascade="all, delete-orphan")
+    policies: Mapped[List["src.models.entities.Policy"]] = relationship(back_populates="plan_macro", cascade="all, delete-orphan")
 
 class Policy(Base):
     __tablename__ = "policies"
@@ -94,8 +95,12 @@ class Policy(Base):
     weight: Mapped[float] = mapped_column(Float, default=0.0)
     progress: Mapped[float] = mapped_column(Float, default=0.0)
     
-    plan_macro: Mapped["PlanMacro"] = relationship(back_populates="policies")
-    strategic_items: Mapped[List["StrategicItem"]] = relationship(back_populates="policy", cascade="all, delete-orphan")
+    plan_macro: Mapped["src.models.entities.PlanMacro"] = relationship(back_populates="policies")
+    strategic_items: Mapped[List["src.models.entities.StrategicItem"]] = relationship(back_populates="policy", cascade="all, delete-orphan")
+
+    @property
+    def is_locked(self) -> bool:
+        return self.plan_macro.is_locked
 
 class StrategicItem(Base):
     __tablename__ = "strategic_items"
@@ -107,8 +112,12 @@ class StrategicItem(Base):
     weight: Mapped[float] = mapped_column(Float, default=0.0)
     progress: Mapped[float] = mapped_column(Float, default=0.0)
     
-    policy: Mapped["Policy"] = relationship(back_populates="strategic_items")
-    activities: Mapped[List["Activity"]] = relationship(back_populates="strategic_item", cascade="all, delete-orphan")
+    policy: Mapped["src.models.entities.Policy"] = relationship(back_populates="strategic_items")
+    activities: Mapped[List["src.models.entities.Activity"]] = relationship(back_populates="strategic_item", cascade="all, delete-orphan")
+
+    @property
+    def is_locked(self) -> bool:
+        return self.policy.is_locked
 
 class Activity(Base):
     __tablename__ = "activities"
@@ -120,12 +129,16 @@ class Activity(Base):
     progress: Mapped[float] = mapped_column(Float, default=0.0)
     status: Mapped[str] = mapped_column(String(20), default="Pendiente")
     
-    strategic_item: Mapped["StrategicItem"] = relationship(back_populates="activities")
-    tasks: Mapped[List["Task"]] = relationship(back_populates="activity", cascade="all, delete-orphan")
-    evidences: Mapped[List["Evidence"]] = relationship(back_populates="activity", cascade="all, delete-orphan")
-    supervisors: Mapped[List["Responsible"]] = relationship(
+    strategic_item: Mapped["src.models.entities.StrategicItem"] = relationship(back_populates="activities")
+    tasks: Mapped[List["src.models.entities.Task"]] = relationship(back_populates="activity", cascade="all, delete-orphan")
+    evidences: Mapped[List["src.models.entities.Evidence"]] = relationship(back_populates="activity", cascade="all, delete-orphan")
+    supervisors: Mapped[List["src.models.entities.Responsible"]] = relationship(
         secondary=activity_supervisors, back_populates="supervised_activities"
     )
+
+    @property
+    def is_locked(self) -> bool:
+        return self.strategic_item.is_locked
 
 class Task(Base):
     __tablename__ = "tasks"
@@ -142,12 +155,17 @@ class Task(Base):
     fulfillment_date: Mapped[Optional[datetime]] = mapped_column(DateTime)
     responsible_name: Mapped[Optional[str]] = mapped_column(String(100))
     observations: Mapped[Optional[str]] = mapped_column(Text)
+    delay_justification: Mapped[Optional[str]] = mapped_column(Text)  # 2.3 — justificación de retraso
     
-    activity: Mapped["Activity"] = relationship(back_populates="tasks")
-    evidences: Mapped[List["Evidence"]] = relationship(back_populates="task", cascade="all, delete-orphan")
-    responsibles: Mapped[List["Responsible"]] = relationship(
+    activity: Mapped["src.models.entities.Activity"] = relationship(back_populates="tasks")
+    evidences: Mapped[List["src.models.entities.Evidence"]] = relationship(back_populates="task", cascade="all, delete-orphan")
+    responsibles: Mapped[List["src.models.entities.Responsible"]] = relationship(
         secondary=task_responsibles, back_populates="tasks"
     )
+
+    @property
+    def is_locked(self) -> bool:
+        return self.activity.is_locked
 
 class Evidence(Base):
     __tablename__ = "evidences"
@@ -158,6 +176,32 @@ class Evidence(Base):
     url: Mapped[str] = mapped_column(String(500))
     description: Mapped[Optional[str]] = mapped_column(String(200))
     uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    uploaded_by_name: Mapped[Optional[str]] = mapped_column(String(100))  # 2.4 — quién la cargó
     
-    task: Mapped[Optional["Task"]] = relationship(back_populates="evidences")
-    activity: Mapped[Optional["Activity"]] = relationship(back_populates="evidences")
+    task: Mapped[Optional["src.models.entities.Task"]] = relationship(back_populates="evidences")
+    activity: Mapped[Optional["src.models.entities.Activity"]] = relationship(back_populates="evidences")
+
+    @property
+    def is_locked(self) -> bool:
+        if self.task:
+            return self.task.is_locked
+        if self.activity:
+            return self.activity.is_locked
+        return False
+
+class ChangeLog(Base):
+    """
+    2.2 — Audit trail: records every change to Tasks and Activities.
+    Enables full traceability of who changed what and when.
+    """
+    __tablename__ = "change_logs"
+    __table_args__ = {'extend_existing': True}
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    entity_type: Mapped[str] = mapped_column(String(50))      # 'Task', 'Activity'
+    entity_id: Mapped[int] = mapped_column(Integer)
+    entity_name: Mapped[str] = mapped_column(String(200))
+    field_changed: Mapped[str] = mapped_column(String(100))   # 'status', 'progress', 'observations'
+    old_value: Mapped[Optional[str]] = mapped_column(Text)
+    new_value: Mapped[Optional[str]] = mapped_column(Text)
+    changed_by: Mapped[str] = mapped_column(String(100))      # username
+    changed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

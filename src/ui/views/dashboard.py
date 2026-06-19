@@ -3,163 +3,331 @@ import plotly.graph_objects as go
 import plotly.express as px
 from sqlalchemy.orm import joinedload
 from src.core.database import SessionLocal
-from src.models.entities import PlanMacro, Policy, StrategicItem, Activity, Task
+from src.models.entities import PlanMacro, Policy, StrategicItem, Activity, Task, Responsible
 from src.services.calculations import CalculationService
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
+import html
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+COLORS = {
+    "primary":   "#00594e",
+    "secondary": "#b5a160",
+    "neutral":   "#64748b",
+    "success":   "#10b981",
+    "warning":   "#f59e0b",
+    "danger":    "#ef4444",
+}
+
+def _alert_banner(db):
+    """Shows collapsible alert banners at the top of the dashboard."""
+    now = datetime.now()
+    vencidas = db.query(Task).options(
+        joinedload(Task.responsibles),
+        joinedload(Task.activity).joinedload(Activity.strategic_item).joinedload(StrategicItem.policy)
+    ).filter(Task.status != "Cumplida", Task.end_date < now).all()
+
+    proximas = db.query(Task).options(
+        joinedload(Task.responsibles),
+        joinedload(Task.activity).joinedload(Activity.strategic_item).joinedload(StrategicItem.policy)
+    ).filter(
+        Task.status != "Cumplida",
+        Task.end_date >= now,
+        Task.end_date <= now + timedelta(days=7)
+    ).all()
+
+    if not vencidas and not proximas:
+        return  # Nothing urgent — don't show banners
+
+    if vencidas:
+        with st.expander(f"🔴 **{len(vencidas)} tarea(s) VENCIDA(S)** — Sin cumplir dentro del plazo", expanded=True):
+            for t in vencidas:
+                dias = (now - t.end_date).days
+                res  = ", ".join(r.name for r in t.responsibles) if t.responsibles else "Sin asignar"
+                pol  = t.activity.strategic_item.policy.name if t.activity and t.activity.strategic_item else "—"
+                st.markdown(
+                    f"- **{html.escape(t.name)}** · `{res}` · "
+                    f"<span style='color:#ef4444;'>Venció hace {dias} día(s)</span> · _{html.escape(pol)}_",
+                    unsafe_allow_html=True
+                )
+
+    if proximas:
+        with st.expander(f"🟡 **{len(proximas)} tarea(s)** vencen esta semana", expanded=False):
+            for t in proximas:
+                dias = (t.end_date - now).days
+                res  = ", ".join(r.name for r in t.responsibles) if t.responsibles else "Sin asignar"
+                pol  = t.activity.strategic_item.policy.name if t.activity and t.activity.strategic_item else "—"
+                st.markdown(
+                    f"- **{html.escape(t.name)}** · `{res}` · "
+                    f"<span style='color:#f59e0b;'>Vence en {dias} día(s)</span> · _{html.escape(pol)}_",
+                    unsafe_allow_html=True
+                )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+
+def _team_table(db, macro):
+    """Shows a summary table of all responsibles and their task progress."""
+    responsibles = db.query(Responsible).all()
+    rows = []
+    now  = datetime.now()
+
+    for r in responsibles:
+        tasks_year = [
+            t for t in r.tasks
+            if t.activity and t.activity.strategic_item
+            and t.activity.strategic_item.policy
+            and t.activity.strategic_item.policy.plan_macro_id == macro.id
+        ]
+        if not tasks_year:
+            continue
+
+        total     = len(tasks_year)
+        cumplidas = sum(1 for t in tasks_year if t.status == "Cumplida")
+        vencidas  = sum(1 for t in tasks_year if t.status != "Cumplida" and t.end_date and t.end_date < now)
+        avg_prog  = sum(t.progress for t in tasks_year) / total
+
+        semaforo = "🟢" if avg_prog >= 80 else ("🟡" if avg_prog >= 50 else "🔴")
+        rows.append({
+            "Funcionaria":  r.name,
+            "Cargo":        r.role,
+            "Total":        total,
+            "✅ Cumplidas": cumplidas,
+            "🚫 Vencidas":  vencidas,
+            "Avance %":     round(avg_prog, 1),
+            " ":            semaforo,
+        })
+
+    if not rows:
+        st.info("No hay responsables con tareas asignadas en este plan.")
+        return
+
+    df = pd.DataFrame(rows).sort_values("Avance %", ascending=False)
+    st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Avance %": st.column_config.ProgressColumn(
+                "Avance %", format="%.1f%%", min_value=0, max_value=100
+            )
+        }
+    )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main view
+# ─────────────────────────────────────────────────────────────────────────────
 
 def show_executive_dashboard():
     """
-    Renders the Executive Dashboard with high-level Business Intelligence metrics.
-    Uses interactive Plotly charts for policy compliance and strategic networking.
+    Tablero de control estratégico con alertas integradas, métricas clave,
+    gráficos de cumplimiento y tabla de equipo.
     """
-    # --- High-End Visual Configuration ---
-    COLORS = {
-        "primary": "#00594e",
-        "secondary": "#b5a160",
-        "neutral": "#64748b",
-        "success": "#10b981",
-        "warning": "#f59e0b",
-        "danger": "#ef4444"
-    }
-    
     st.markdown("<div class='corporate-header'>", unsafe_allow_html=True)
     st.title("🏛️ Tablero de Control Estratégico TH")
-    st.write("Seguimiento Integral: Gestión Macro, Políticas y Programas")
+    st.write("Seguimiento integral: alertas, políticas, programas y equipo.")
     st.markdown("</div>", unsafe_allow_html=True)
-    
+
     db = SessionLocal()
     try:
-        # Carga completa para análisis multinivel
         macros = db.query(PlanMacro).options(
             joinedload(PlanMacro.policies).joinedload(Policy.strategic_items)
+            .joinedload(StrategicItem.activities).joinedload(Activity.tasks)
         ).all()
-        
-        if not macros: return st.info("No hay datos registrados para análisis.")
 
-        # --- FILTROS DE FÁCIL ACCESO ---
-        st.markdown("### 📊 Filtros de Consulta")
-        with st.container(border=True):
-            f1, f2, f3, f4 = st.columns(4)
-            all_years = sorted(list(set([m.year for m in macros] + [datetime.now().year])))
-            sel_year = f1.selectbox("📅 Año", all_years, index=all_years.index(datetime.now().year) if datetime.now().year in all_years else 0)
-            sel_semester = f2.selectbox("🌓 Semestre", ["Todos", "Semestre A", "Semestre B"])
-            sel_quarter = f3.selectbox("📊 Trimestre", ["Todos", "T1", "T2", "T3", "T4"])
-            months_names = ["Todos", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-            sel_month = f4.selectbox("📆 Mes", months_names)
+        if not macros:
+            return st.info("No hay datos registrados para análisis.")
 
-        macro = next((m for m in macros if m.year == sel_year), macros[0])
+        # ── AÑO ────────────────────────────────────────────────────────
+        all_years = sorted(set(m.year for m in macros))
+        col_year, _ = st.columns([1, 3])
+        sel_year = col_year.selectbox("📅 Año de gestión", all_years,
+                                      index=all_years.index(datetime.now().year)
+                                      if datetime.now().year in all_years else len(all_years) - 1)
+        macro = next((m for m in macros if m.year == sel_year), macros[-1])
 
-        # Recolección de datos filtrados
+        # ── ALERTAS AL TOPE ────────────────────────────────────────────
+        _alert_banner(db)
+
+        # ── MÉTRICAS PRINCIPALES ───────────────────────────────────────
+        tasks_all = [
+            t for pol in macro.policies
+            for si in pol.strategic_items
+            for act in si.activities
+            for t in act.tasks
+        ]
+        now          = datetime.now()
+        en_proceso   = sum(1 for t in tasks_all if t.status == "En Proceso")
+        n_resp       = db.query(Responsible).count()
+
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("📊 Avance Consolidado",  f"{macro.progress:.1f}%")
+        k2.metric("📂 Políticas",           len(macro.policies))
+        k3.metric("⚙️ En Proceso",          en_proceso)
+        k4.metric("👥 Funcionarias",        n_resp)
+
+        st.divider()
+
+        # ── GRÁFICOS: VELOCÍMETRO + BARRAS POR POLÍTICA ────────────────
+        col_left, col_right = st.columns([1, 1.2])
+
+        with col_left:
+            _, color = CalculationService.get_semaforo(macro.progress)
+            fig_gauge = go.Figure(go.Indicator(
+                mode="gauge+number", value=macro.progress,
+                number={"suffix": "%", "valueformat": ".1f"},
+                title={"text": "Avance Consolidado TH", "font": {"size": 17, "color": COLORS["primary"]}},
+                gauge={
+                    "axis": {"range": [None, 100]},
+                    "bar":  {"color": color},
+                    "steps": [
+                        {"range": [0,  60], "color": "#fee2e2"},
+                        {"range": [60, 80], "color": "#fef3c7"},
+                        {"range": [80, 100], "color": "#d1fae5"},
+                    ],
+                }
+            ))
+            fig_gauge.update_layout(height=320, margin=dict(l=20, r=20, t=50, b=10), template="plotly_white")
+            st.plotly_chart(fig_gauge, use_container_width=True)
+
+        with col_right:
+            pol_data = [{"Nombre": p.name, "Avance": p.progress} for p in macro.policies]
+            df_pol   = pd.DataFrame(pol_data).sort_values("Avance", ascending=True)
+            fig_pol  = px.bar(
+                df_pol, x="Avance", y="Nombre", orientation="h",
+                title="Cumplimiento por Política",
+                color="Avance",
+                color_continuous_scale=[[0, "#ef4444"], [0.5, "#f59e0b"], [1, "#10b981"]],
+                template="plotly_white"
+            )
+            fig_pol.update_traces(texttemplate="%{x:.1f}%", textposition="outside")
+            fig_pol.update_layout(
+                showlegend=False,
+                xaxis=dict(range=[0, 110]),
+                yaxis=dict(title=""),
+                height=320,
+                margin=dict(l=10, r=30, t=50, b=10)
+            )
+            st.plotly_chart(fig_pol, use_container_width=True)
+
+        st.divider()
+
+        # ── TREEMAP DESGLOSE ESTRATÉGICO ───────────────────────────────
         tasks_data = []
         for pol in macro.policies:
             for si in pol.strategic_items:
                 for act in si.activities:
                     for t in act.tasks:
-                        if not t.end_date: continue
-                        match = True
-                        if sel_semester == "Semestre A" and not (1 <= t.end_date.month <= 6): match = False
-                        if sel_semester == "Semestre B" and not (7 <= t.end_date.month <= 12): match = False
-                        if sel_quarter != "Todos" and f"T{(t.end_date.month-1)//3+1}" != sel_quarter: match = False
-                        if sel_month != "Todos" and months_names[t.end_date.month] != sel_month: match = False
-                        if match:
-                            tasks_data.append({
-                                "Política": pol.name,
-                                "Programa/Plan": si.name,
-                                "Avance": t.progress,
-                                "Estado": t.status,
-                                "Fecha": t.end_date
-                            })
-        
+                        tasks_data.append({
+                            "Política":      pol.name,
+                            "Estrategia": si.name,
+                            "Avance":        t.progress,
+                        })
+
         df_f = pd.DataFrame(tasks_data)
-
-        # --- SECCIÓN 1: GESTIÓN MACRO (NIVEL 5) ---
-        st.markdown(f"## 🏢 {macro.name}")
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Avance Plan Macro", f"{macro.progress:.1f}%")
-        k2.metric("Cumplimiento Periodo", f"{df_f['Avance'].mean() if not df_f.empty else 0:.1f}%")
-        k3.metric("Tareas Activas", len(df_f))
-        k4.metric("Políticas en Curso", len(macro.policies))
-
-        st.divider()
-
-        # --- SECCIÓN 2: POLÍTICAS Y PROGRAMAS (NIVELES 4 Y 3) ---
-        col_left, col_right = st.columns([1, 1.2])
-
-        with col_left:
-            # Velocímetro Principal: Gestión Institucional
-            _, color = CalculationService.get_semaforo(macro.progress)
-            fig_macro = go.Figure(go.Indicator(
-                mode = "gauge+number", value = macro.progress,
-                number={'suffix': "%", 'valueformat': ".1f"},
-                title = {'text': "Avance Consolidado TH", 'font': {'size': 18, 'color': COLORS["primary"]}},
-                gauge = {
-                    'axis': {'range': [None, 100]},
-                    'bar': {'color': color},
-                    'steps': [
-                        {'range': [0, 60], 'color': "#fee2e2"},
-                        {'range': [60, 80], 'color': "#fef3c7"},
-                        {'range': [80, 100], 'color': "#d1fae5"}
-                    ]
-                }
-            ))
-            fig_macro.update_layout(height=350, margin=dict(l=30, r=30, t=50, b=20), template="plotly_white")
-            st.plotly_chart(fig_macro, use_container_width=True)
-
-        with col_right:
-            # Avance por Política (Horizontal Bar - Fácil de entender)
-            pol_list = [{"Nombre": p.name, "Avance": p.progress} for p in macro.policies]
-            df_pol = pd.DataFrame(pol_list).sort_values("Avance", ascending=True)
-            
-            fig_pol = px.bar(
-                df_pol, x='Avance', y='Nombre', orientation='h',
-                title="Cumplimiento por Política Institucional",
-                color='Avance',
-                color_continuous_scale=[[0, '#ef4444'], [0.5, '#f59e0b'], [1, '#10b981']],
-                template="plotly_white"
-            )
-            fig_pol.update_traces(texttemplate='%{x:.1f}%', textposition='outside')
-            fig_pol.update_layout(showlegend=False, xaxis=dict(range=[0, 110]), yaxis=dict(title=""))
-            st.plotly_chart(fig_pol, use_container_width=True)
-
-        st.divider()
-
-        # --- SECCIÓN 3: DESGLOSE DE PROGRAMAS Y PLANES ---
-        st.subheader("🧩 Desglose Estratégico (Políticas > Programas > Planes)")
-        
-        # Gráfico Sunburst: Lo más fácil para ver jerarquías
         if not df_f.empty:
-            fig_sun = px.sunburst(
-                df_f, path=['Política', 'Programa/Plan'], values='Avance',
-                title="Mapa de Programas y Planes por Política",
-                color='Avance',
-                color_continuous_scale='RdYlGn',
-                template="plotly_white",
-                hover_data={'Avance': ':.1f'}
+            st.subheader("🧩 Desglose Estratégico")
+            df_f["Peso"] = 1
+            fig_tree = px.treemap(
+                df_f,
+                path=[px.Constant("Plan TH"), "Política", "Estrategia"],
+                values="Peso",
+                color="Avance",
+                color_continuous_scale=[[0, "#fee2e2"], [0.5, "#fef3c7"], [1, "#d1fae5"]],
+                title="Mapa de calor — volumen y avance por área"
             )
-            fig_sun.update_traces(
-                texttemplate="<b>%{label}</b>",
-                hovertemplate="<b>%{label}</b><br>Avance: %{color:.1f}%<extra></extra>"
+            fig_tree.update_traces(
+                texttemplate="<b>%{label}</b><br>%{color:.1f}%",
+                hovertemplate="<b>%{label}</b><br>Avance: %{color:.1f}%<br>Hitos: %{value}<extra></extra>",
+                marker=dict(line=dict(color="#fff", width=2))
             )
-            fig_sun.update_layout(margin=dict(t=40, l=0, r=0, b=0), height=500)
-            st.plotly_chart(fig_sun, use_container_width=True)
+            fig_tree.update_layout(margin=dict(t=40, l=0, r=0, b=0), height=420)
+            st.plotly_chart(fig_tree, use_container_width=True)
         else:
-            st.info("No hay datos suficientes para el desglose detallado en este periodo.")
+            st.info("Sin hitos estratégicos configurados.")
 
-        # --- SECCIÓN 4: TENDENCIA TEMPORAL ---
-        if not df_f.empty:
-            st.subheader("📈 Evolución de la Gestión")
-            df_f['Mes'] = df_f['Fecha'].dt.strftime('%b %Y')
-            df_trend = df_f.groupby('Mes')['Avance'].mean().reset_index()
-            
-            fig_trend = px.line(
-                df_trend, x='Mes', y='Avance', markers=True, text='Avance',
-                title="Tendencia de Avance del Periodo",
-                template="plotly_white"
-            )
-            fig_trend.update_traces(line_color=COLORS["primary"], line_width=4, texttemplate='%{y:.1f}%', textposition='top center')
-            fig_trend.update_layout(yaxis=dict(range=[0, 115]))
-            st.plotly_chart(fig_trend, use_container_width=True)
+        st.divider()
+
+        # ── TABLA DE EQUIPO ────────────────────────────────────────────
+        st.subheader("👥 Avance por Funcionaria")
+        _team_table(db, macro)
+
+        st.divider()
+
+        # ── PROYECCIÓN DE CUMPLIMIENTO (2.6) ──────────────────────────
+        st.subheader("📈 Proyección de Cumplimiento")
+        st.caption("Estimación de cuándo se alcanzará el 100% al ritmo actual de avance.")
+
+        from datetime import timedelta
+        tasks_active = [
+            t for pol in macro.policies
+            for si in pol.strategic_items
+            for act in si.activities
+            for t in act.tasks
+            if t.status != "Cumplida"
+        ]
+
+        # Calcular velocidad promedio: progreso acumulado / días transcurridos
+        now_dt = datetime.now()
+        velocidades = []
+        for t in tasks_active:
+            if t.start_date and t.progress > 0:
+                dias_trans = max((now_dt - t.start_date).days, 1)
+                vel = t.progress / dias_trans  # % por día
+                velocidades.append(vel)
+
+        current_prog = macro.progress
+        if velocidades and current_prog < 100:
+            vel_promedio = sum(velocidades) / len(velocidades)
+            restante     = 100 - current_prog
+            dias_proy    = int(restante / vel_promedio) if vel_promedio > 0 else None
+            fecha_proy   = now_dt + timedelta(days=dias_proy) if dias_proy else None
+
+            pc1, pc2, pc3 = st.columns(3)
+            pc1.metric("🚀 Velocidad actual", f"{vel_promedio:.2f}% / día")
+            pc2.metric("🎯 Restante para 100%", f"{restante:.1f}%")
+            if fecha_proy:
+                pc3.metric(
+                    "📅 Fecha estimada de cierre",
+                    fecha_proy.strftime("%d/%m/%Y"),
+                    delta=f"en {dias_proy} días",
+                    delta_color="normal" if dias_proy > 0 else "inverse"
+                )
+
+            # Mini gráfico de proyección lineal
+            import numpy as np
+            fechas_hist = [now_dt - timedelta(days=30), now_dt]
+            prog_hist   = [max(current_prog - vel_promedio * 30, 0), current_prog]
+            if fecha_proy and dias_proy < 730:  # Solo proyectar si < 2 años
+                fechas_proj = [now_dt, fecha_proy]
+                prog_proj   = [current_prog, 100]
+
+                import plotly.graph_objects as go
+                fig_proj = go.Figure()
+                fig_proj.add_trace(go.Scatter(
+                    x=fechas_hist, y=prog_hist, mode="lines+markers",
+                    name="Avance real", line=dict(color="#00594e", width=3)
+                ))
+                fig_proj.add_trace(go.Scatter(
+                    x=fechas_proj, y=prog_proj, mode="lines",
+                    name="Proyección", line=dict(color="#b5a160", width=2, dash="dash")
+                ))
+                fig_proj.add_hline(y=100, line_dash="dot", line_color="#10b981",
+                                   annotation_text="100% ✅")
+                fig_proj.update_layout(
+                    height=260, template="plotly_white",
+                    yaxis=dict(range=[0, 110], title="% Avance"),
+                    margin=dict(l=10, r=10, t=20, b=20),
+                    legend=dict(orientation="h", y=-0.3)
+                )
+                st.plotly_chart(fig_proj, use_container_width=True)
+        elif current_prog >= 100:
+            st.success("🎉 ¡Plan al 100%! Todos los objetivos están cumplidos.")
+        else:
+            st.info("No hay suficientes datos para proyectar. Actualiza el avance de las tareas para generar la proyección.")
 
     finally:
         db.close()

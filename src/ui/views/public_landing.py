@@ -63,7 +63,7 @@ def show_public_landing():
                         if match:
                             tasks_data.append({
                                 "Política": pol.name,
-                                "Programa": si.name,
+                                "Estrategia": si.name,
                                 "Avance": t.progress,
                                 "Fecha": t.end_date
                             })
@@ -148,7 +148,7 @@ def show_public_landing():
                 
                 fig_tree = px.treemap(
                     df_f, 
-                    path=[px.Constant("Visión Global"), 'Política', 'Programa'], 
+                    path=[px.Constant("Visión Global"), 'Política', 'Estrategia'], 
                     values='Peso',
                     color='Avance',
                     color_continuous_scale=[[0, '#fee2e2'], [0.5, '#fef3c7'], [1, '#d1fae5']], # Colores pastel semáforo

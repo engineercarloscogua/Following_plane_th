@@ -64,27 +64,34 @@ def show_admin_view():
     """
     Main Administration interface for managing the 5-level institutional hierarchy.
     Allows CRUD operations on Plans, Policies, Programs, Activities, and Responsibles.
+    Simplified to 4 tabs: Estructura (Macro+Planes fusionados), Cronograma, Equipo, Continuidad.
     """
     st.markdown("<div class='corporate-header'>", unsafe_allow_html=True)
-    st.title("⚙️ Configuración de Estructura Institucional")
-    st.write("Administración jerárquica y cronograma institucional")
+    st.title("⚙️ Configuración")
+    st.write("Gestión de la estructura institucional, cronograma y equipo.")
     st.markdown("</div>", unsafe_allow_html=True)
-    
+
     db = SessionLocal()
     try:
-        t1, t2, t3, t4, t5 = st.tabs(["🏛️ Gestión Macro", "📂 Planes y Programas", "✅ Operación", "👥 Responsables", "🛠️ Continuidad"])
-        
-        with t1: manage_macro_level(db)
-        with t2: manage_strategic_level(db)
-        with t3: manage_operational_level(db)
-        with t4: manage_responsibles_level(db)
-        with t5: manage_tools_level(db)
-            
+        t1, t2, t3, t4 = st.tabs(["🏛️ Estructura", "✅ Cronograma", "👥 Equipo", "🛠️ Continuidad"])
+
+        with t1: manage_structure_level(db)   # Macro + Planes fusionados
+        with t2: manage_operational_level(db)
+        with t3: manage_responsibles_level(db)
+        with t4: manage_tools_level(db)
+
     finally:
         db.close()
 
 @st.dialog("Eliminar")
 def confirm_delete(db, obj, label):
+    is_locked = getattr(obj, "is_locked", False)
+    if is_locked:
+        st.error("⚠️ Este periodo está cerrado para auditoría y no se puede eliminar.")
+        if st.button("Cerrar", use_container_width=True):
+            st.rerun()
+        return
+
     st.warning(f"¿Eliminar {label}: {obj.name}?")
     if st.button("Confirmar", type="primary"):
         db.delete(obj)
@@ -93,7 +100,11 @@ def confirm_delete(db, obj, label):
 
 @st.dialog("Editar")
 def edit_dialog(db, obj, label):
-    new_name = st.text_input("Nombre", value=obj.name)
+    is_locked = getattr(obj, "is_locked", False)
+    if is_locked:
+        st.warning("⚠️ Este periodo está cerrado para auditoría y no se puede editar (Modo Solo Lectura).")
+
+    new_name = st.text_input("Nombre", value=obj.name, disabled=is_locked)
     is_valid = True
     new_weight = getattr(obj, 'weight', None)
     
@@ -101,7 +112,7 @@ def edit_dialog(db, obj, label):
         siblings_weights = get_siblings_weights(db, obj)
         current_total = sum(siblings_weights)
         
-        new_weight = st.number_input("Peso (%)", min_value=0.0, max_value=100.0, value=float(obj.weight), step=1.0)
+        new_weight = st.number_input("Peso (%)", min_value=0.0, max_value=100.0, value=float(obj.weight), step=1.0, disabled=is_locked)
         projected = current_total + new_weight
         
         if projected > 100.001:
@@ -119,12 +130,12 @@ def edit_dialog(db, obj, label):
     if isinstance(obj, Task):
         col_s1, col_s2 = st.columns(2)
         status_opts = ["Pendiente", "En Proceso", "Cumplida"]
-        new_status = col_s1.selectbox("Estado", status_opts, index=status_opts.index(obj.status) if obj.status in status_opts else 0)
-        new_progress = col_s2.number_input("Avance (%)", value=float(obj.progress), min_value=0.0, max_value=100.0)
+        new_status = col_s1.selectbox("Estado", status_opts, index=status_opts.index(obj.status) if obj.status in status_opts else 0, disabled=is_locked)
+        new_progress = col_s2.number_input("Avance (%)", value=float(obj.progress), min_value=0.0, max_value=100.0, disabled=is_locked)
         
         col1, col2 = st.columns(2)
-        new_start = col1.date_input("Fecha Inicio", value=obj.start_date or datetime.now())
-        new_end = col2.date_input("Fecha Fin", value=obj.end_date or datetime.now())
+        new_start = col1.date_input("Fecha Inicio", value=obj.start_date or datetime.now(), disabled=is_locked)
+        new_end = col2.date_input("Fecha Fin", value=obj.end_date or datetime.now(), disabled=is_locked)
         
         all_res = db.query(Responsible).all()
         res_map = {r.id: r for r in all_res}
@@ -133,7 +144,8 @@ def edit_dialog(db, obj, label):
             "Responsables (Workers) Asignados", 
             options=list(res_map.keys()), 
             default=current_ids,
-            format_func=lambda x: f"{res_map[x].name} ({res_map[x].role})"
+            format_func=lambda x: f"{res_map[x].name} ({res_map[x].role})",
+            disabled=is_locked
         )
         selected_res = [res_map[rid] for rid in selected_ids]
         
@@ -145,13 +157,14 @@ def edit_dialog(db, obj, label):
             "Supervisores Asignados a la Actividad", 
             options=list(res_map.keys()), 
             default=current_ids,
-            format_func=lambda x: f"{res_map[x].name} ({res_map[x].role})"
+            format_func=lambda x: f"{res_map[x].name} ({res_map[x].role})",
+            disabled=is_locked
         )
         selected_res = [res_map[rid] for rid in selected_ids]
 
     
     st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("Guardar", disabled=not is_valid, use_container_width=True, type="primary"):
+    if st.button("Guardar", disabled=is_locked or not is_valid, use_container_width=True, type="primary"):
         try:
             obj.name = new_name
             if hasattr(obj, 'weight'): obj.weight = new_weight
@@ -197,44 +210,72 @@ def _render_item(db, obj, label, prefix=""):
     if c2.button("✏️", key=f"e_{obj.id}_{label}_{obj.__tablename__}_{prefix}"): edit_dialog(db, obj, label)
     if c3.button("🗑️", key=f"d_{obj.id}_{label}_{obj.__tablename__}_{prefix}"): confirm_delete(db, obj, label)
 
-def manage_macro_level(db):
-    st.subheader("1. Gestión Macro y Políticas")
+def manage_structure_level(db):
+    """Merged tab: Macro Plans + Strategic Items (Planes/Programas) in one view."""
+    st.subheader("🏛️ Estructura Institucional")
+    st.caption("Gestiona el Plan Macro, sus Políticas y las Estrategias asociadas.")
+
     with st.expander("➕ Nuevo Plan Macro"):
         with st.form("n_m"):
-            name = st.text_input("Nombre (Ej: Gestión TH)")
+            name = st.text_input("Nombre (Ej: Gestión TH 2025)")
             st.markdown("<div class='btn-activity'>", unsafe_allow_html=True)
             if st.form_submit_button("Crear"):
                 db.add(PlanMacro(name=name, year=2026, objective=""))
                 db.commit()
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
-    
+
     macros = db.query(PlanMacro).options(joinedload(PlanMacro.policies)).order_by(PlanMacro.year.desc(), PlanMacro.id).all()
     for i, m in enumerate(macros, 1):
-        with st.expander(f"📁 {i}. {m.name} ({m.year})", expanded=(i==1)):
+        with st.expander(f"📁 {i}. {m.name} ({m.year})", expanded=(i == 1)):
             _render_item(db, m, "Macro", prefix="Gestión:")
             st.markdown("---")
-            for j, pol in enumerate(m.policies, 1):
-                with st.container(): _render_item(db, pol, "Política", prefix=f"{i}.{j}.")
-            with st.popover("➕ Política"):
-                p_name = st.text_input("Nombre Política", key=f"p_n_{m.id}")
-                s_weights = [p.weight for p in m.policies]
-                mode, p_weight, is_valid = weight_manager_ui(s_weights, "Política", f"p_w_{m.id}")
-                
-                st.markdown("<div class='btn-activity'>", unsafe_allow_html=True)
-                if st.button("Añadir", disabled=not is_valid, key=f"btn_p_{m.id}"):
-                    new_pol = Policy(name=p_name, weight=p_weight, plan_macro_id=m.id)
-                    db.add(new_pol)
-                    if mode == "Automática": auto_distribute_weights(db, list(m.policies), new_pol)
-                    db.commit()
-                    from src.services.calculations import CalculationService
-                    CalculationService.recalculate_all(db)
-                    st.rerun()
-                st.markdown("</div>", unsafe_allow_html=True)
 
-def manage_strategic_level(db):
-    st.subheader("2. Planes y Programas")
-    
+            # Políticas del macro
+            for j, pol in enumerate(m.policies, 1):
+                with st.expander(f"  📂 {i}.{j}. {pol.name} — {pol.progress:.1f}%", expanded=False):
+                    _render_item(db, pol, "Política", prefix=f"{i}.{j}.")
+                    st.markdown("---")
+
+                    # Items estratégicos de la política
+                    items = sorted(pol.strategic_items, key=lambda x: x.id)
+                    for k, item in enumerate(items, 1):
+                        with st.container(border=True):
+                            _render_item(db, item, "Estratégico", prefix=f"{i}.{j}.{k}.")
+
+    # Check if there are active pol and m from the loop to determine lock status
+    is_pol_locked = pol.is_locked if ('pol' in locals() and pol) else False
+    is_m_locked = m.is_locked if ('m' in locals() and m) else False
+
+    with st.popover("➕ Crear Estrategia", use_container_width=True, disabled=is_pol_locked):
+        si_type = st.radio("Tipo", ["Estrategia", "Meta PDI"], key=f"si_type_{pol.id if 'pol' in locals() else 'default'}")
+        si_name = st.text_input(f"Nombre {si_type}", key=f"si_name_{pol.id if 'pol' in locals() else 'default'}")
+        s_weights = [si.weight for si in pol.strategic_items] if ('pol' in locals() and pol) else []
+        mode, weight, is_valid = weight_manager_ui(s_weights, si_type, f"si_w_{pol.id if 'pol' in locals() else 'default'}")
+        if st.button("Guardar", disabled=is_pol_locked or not is_valid, key=f"btn_si_{pol.id if 'pol' in locals() else 'default'}"):
+            new_si = StrategicItem(name=si_name, type=si_type, weight=weight, policy_id=pol.id)
+            db.add(new_si)
+            if mode == "Automática": auto_distribute_weights(db, list(pol.strategic_items), new_si)
+            db.commit()
+            from src.services.calculations import CalculationService
+            CalculationService.recalculate_all(db)
+            st.rerun()
+
+    with st.popover("➕ Política", disabled=is_m_locked):
+        p_name = st.text_input("Nombre Política", key=f"p_n_{m.id if 'm' in locals() else 'default'}")
+        s_weights = [p.weight for p in m.policies] if ('m' in locals() and m) else []
+        mode, p_weight, is_valid = weight_manager_ui(s_weights, "Política", f"p_w_{m.id if 'm' in locals() else 'default'}")
+        st.markdown("<div class='btn-activity'>", unsafe_allow_html=True)
+        if st.button("Añadir", disabled=is_m_locked or not is_valid, key=f"btn_p_{m.id if 'm' in locals() else 'default'}"):
+            new_pol = Policy(name=p_name, weight=p_weight, plan_macro_id=m.id)
+            db.add(new_pol)
+            if mode == "Automática": auto_distribute_weights(db, list(m.policies), new_pol)
+            db.commit()
+            from src.services.calculations import CalculationService
+            CalculationService.recalculate_all(db)
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
     macros = db.query(PlanMacro).order_by(PlanMacro.year.desc(), PlanMacro.id).all()
     if not macros: return st.info("Sin planes macro configurados.")
     
@@ -252,14 +293,14 @@ def manage_strategic_level(db):
         with st.container(border=True):
             _render_item(db, item, "Estratégico", prefix=f"{i}.")
 
-    with st.popover("➕ Crear Plan o Programa", use_container_width=True):
+    with st.popover("➕ Crear Plan o Programa", use_container_width=True, disabled=pol.is_locked):
         type = st.radio("Tipo", ["Plan", "Programa"], key=f"si_type_{pol.id}")
         name = st.text_input(f"Nombre {type}", key=f"si_name_{pol.id}")
         
         s_weights = [si.weight for si in pol.strategic_items]
         mode, weight, is_valid = weight_manager_ui(s_weights, type, f"si_w_{pol.id}")
         
-        if st.button("Guardar", disabled=not is_valid, key=f"btn_si_{pol.id}"):
+        if st.button("Guardar", disabled=pol.is_locked or not is_valid, key=f"btn_si_{pol.id}"):
             new_si = StrategicItem(name=name, type=type, weight=weight, policy_id=pol.id)
             db.add(new_si)
             if mode == "Automática": auto_distribute_weights(db, list(pol.strategic_items), new_si)
@@ -282,9 +323,9 @@ def manage_operational_level(db):
     pol_id = st.selectbox("2. Política", options=[p.id for p in macro.policies], format_func=lambda x: f"{next(p.name for p in macro.policies if p.id == x)} ({next(p.progress for p in macro.policies if p.id == x):.1f}%)", key="p_op")
     policy = db.query(Policy).filter(Policy.id == pol_id).first()
     
-    if not policy.strategic_items: return st.info("Cree Planes o Programas primero en esta política.")
+    if not policy.strategic_items: return st.info("Cree Estrategias primero en esta política.")
     
-    si_id = st.selectbox("3. Plan / Programa", options=[si.id for si in policy.strategic_items], format_func=lambda x: f"{next(si.name for si in policy.strategic_items if si.id == x)} ({next(si.progress for si in policy.strategic_items if si.id == x):.1f}%)", key="si_op")
+    si_id = st.selectbox("3. Estrategia", options=[si.id for si in policy.strategic_items], format_func=lambda x: f"{next(si.name for si in policy.strategic_items if si.id == x)} ({next(si.progress for si in policy.strategic_items if si.id == x):.1f}%)", key="si_op")
     item = db.query(StrategicItem).options(
         joinedload(StrategicItem.activities).joinedload(Activity.tasks).joinedload(Task.responsibles)
     ).filter(StrategicItem.id == si_id).first()
@@ -307,9 +348,9 @@ def manage_operational_level(db):
                     st.markdown("<br>", unsafe_allow_html=True)
                     col_t1, col_t2 = st.columns([5, 1])
                     if col_t1.button("✏️ Editar Tarea", key=f"e_{t.id}_T", use_container_width=True): edit_dialog(db, t, "Tarea")
-                    if col_t2.button("🗑️", key=f"d_{t.id}_T", use_container_width=True): confirm_delete(db, t, "Tarea")
+                    if col_t2.button("🗑️", key=f"d_{t.id}_T", use_container_width=True, disabled=t.is_locked): confirm_delete(db, t, "Tarea")
             
-            with st.popover("➕ Añadir Tarea con Cronograma", use_container_width=True):
+            with st.popover("➕ Añadir Tarea con Cronograma", use_container_width=True, disabled=act.is_locked):
                 t_name = st.text_input("Descripción Tarea", key=f"n_t_{act.id}")
                 
                 s_weights = [t.weight for t in act.tasks]
@@ -329,7 +370,7 @@ def manage_operational_level(db):
                     key=f"res_t_{act.id}"
                 )
                 
-                if st.button("Vincular Tarea", disabled=not is_valid, key=f"btn_t_{act.id}"):
+                if st.button("Vincular Tarea", disabled=act.is_locked or not is_valid, key=f"btn_t_{act.id}"):
                     new_task = Task(
                         name=t_name, 
                         weight=t_weight, 
@@ -349,7 +390,7 @@ def manage_operational_level(db):
                     st.rerun()
 
     st.markdown("<div class='btn-activity'>", unsafe_allow_html=True)
-    with st.popover("➕ Nueva Actividad", use_container_width=True):
+    with st.popover("➕ Nueva Actividad", use_container_width=True, disabled=item.is_locked):
         name = st.text_input("Actividad", key=f"n_act_{item.id}")
         
         s_weights = [a.weight for a in item.activities]
@@ -364,7 +405,7 @@ def manage_operational_level(db):
             key=f"res_act_{item.id}"
         )
         
-        if st.button("Crear", disabled=not is_valid, key=f"btn_act_{item.id}"):
+        if st.button("Crear", disabled=item.is_locked or not is_valid, key=f"btn_act_{item.id}"):
             new_act = Activity(name=name, weight=weight, strategic_item_id=item.id)
             new_act.supervisors = [res_map[rid] for rid in selected_res_ids]
             db.add(new_act)
@@ -559,3 +600,27 @@ def manage_tools_level(db):
                 except Exception as e:
                     db.rollback()
                     st.error(f"Error de Integridad: {str(e)}")
+
+    st.markdown("<br><hr>", unsafe_allow_html=True)
+    st.subheader("🔒 Control de Cierre de Periodos (Auditoría)")
+    st.write("Cierra y bloquea la edición de datos para un Plan Macro completo. Una vez bloqueado, ni Workers ni Supervisores ni Administradores podrán modificar o eliminar elementos del plan.")
+
+    # Re-query macros to make sure we have latest state
+    all_macros = db.query(PlanMacro).order_by(PlanMacro.year.desc()).all()
+    if not all_macros:
+        st.info("No hay planes macros registrados.")
+        return
+
+    for m in all_macros:
+        status_str = "🔴 **Cerrado/Bloqueado para Auditoría**" if m.is_locked else "🟢 **Activo/Abierto**"
+        button_label = "🔓 Desbloquear Periodo" if m.is_locked else "🔒 Cerrar y Bloquear Periodo"
+        button_type = "secondary" if m.is_locked else "primary"
+        
+        with st.container(border=True):
+            col_m1, col_m2 = st.columns([3, 1])
+            col_m1.markdown(f"**{m.name} ({m.year})**  \nEstado: {status_str}")
+            if col_m2.button(button_label, key=f"lock_toggle_{m.id}", type=button_type, use_container_width=True):
+                m.is_locked = not m.is_locked
+                db.commit()
+                st.toast(f"Plan '{m.name}' {'bloqueado' if m.is_locked else 'desbloqueado'} exitosamente.")
+                st.rerun()
